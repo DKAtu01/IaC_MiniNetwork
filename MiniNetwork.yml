@@ -7,6 +7,18 @@ Parameters:
     Description: Key Pair name
     Type: AWS::EC2::KeyPair::KeyName
     Default: keypair01
+  MultiAZa:
+    Type: String
+    Default: us-east-1a
+  MultiAZb:
+    Type: String
+    Default: us-east-1b
+  MultiAZDB:
+    Type: String
+    Default: true
+
+  Subnets:
+    Type: 'List<AWS::EC2::Subnet::Id>'
 
   CIDRVpc:
     Type: String
@@ -14,23 +26,23 @@ Parameters:
 
   CIDRPublicSub01:
     Type: String
-    Default: 10.10.10.0/16
+    Default: 10.10.10.0/24
 
   CIDRPublicSub02:
     Type: String
-    Default: 10.10.20.0/16
+    Default: 10.10.11.0/24
 
   CIDRPrivateSub01:
     Type: String
-    Default: 10.10.30.0/16
+    Default: 10.10.20.0/24
 
   CIDRPrivateSub02:
     Type: String
-    Default: 10.10.40.0/16
+    Default: 10.10.21.0/24
 
   CIDRRdsSub:
     Type: String
-    Default: 10.10.50.0/16
+    Default: 10.10.30.0/24
 
 Resources:
   VPC:
@@ -44,17 +56,40 @@ Resources:
           Value: !Ref EnvTag
 
   InternetGateway:
-      Type: AWS::EC2::InternetGateway
-      Properties:
-        Tags:
-          - Key: Name
-            Value: !Ref EnvironmentTag
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Ref EnvTag
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Public Routes
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
 
   PublicSubnet01:
       Type: AWS::EC2::Subnet
       Properties:
         VpcId: !Ref VPC
-        AvailabilityZone: us-east-1a
+        AvailabilityZone: !Ref MultiAZa
         CidrBlock: !Ref CIDRPublicSub01
         MapPublicIpOnLaunch: true
 
@@ -62,7 +97,7 @@ Resources:
       Type: AWS::EC2::Subnet
       Properties:
         VpcId: !Ref VPC
-        AvailabilityZone: us-east-1b
+        AvailabilityZone: !Ref MultiAZb
         CidrBlock: !Ref CIDRPublicSub02
         MapPublicIpOnLaunch: true
 
@@ -70,7 +105,7 @@ Resources:
       Type: AWS::EC2::Subnet
       Properties:
         VpcId: !Ref VPC
-        AvailabilityZone: us-east-1a
+        AvailabilityZone: !Ref MultiAZa
         CidrBlock: !Ref CIDRPrivateSub01
         MapPublicIpOnLaunch: false
 
@@ -78,11 +113,73 @@ Resources:
       Type: AWS::EC2::Subnet
       Properties:
         VpcId: !Ref VPC
-        AvailabilityZone: us-east-1a
+        AvailabilityZone: !Ref MultiAZb
         CidrBlock: !Ref CIDRPrivateSub02
         MapPublicIpOnLaunch: false
 
-  JumpBoxA:
+  RDSPrivateSubnet:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: us-east-1a
+        CidrBlock: !Ref CIDRRdsSub
+        MapPublicIpOnLaunch: false
+
+  ApplicationLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Subnets: !Ref Subnets
+
+  ALBListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: '80'
+      Protocol: HTTP
+
+  ALBTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId: !Ref VPC
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: 'true'
+        - Key: stickiness.type
+          Value: lb_cookie
+        - Key: stickiness.lb_cookie.duration_seconds
+          Value: '30'
+
+  WebServerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable access via port 80 and 22
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          SourceSecurityGroupId: !Select 
+            - 0
+            - !GetAtt 
+              - ApplicationLoadBalancer
+              - SecurityGroups
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref VPC
+
+
+
+  WebServer01:
       Type: AWS::EC2::Instance
       Properties:
         SubnetId: !Ref PublicSubnet01
@@ -98,18 +195,29 @@ Resources:
         InstanceType: t3.nano
         ImageId: ami-0bb4c991fa89d4b9b
 
-  FrontEnd01:
+  JumpBoxB:
       Type: AWS::EC2::Instance
       Properties:
-        SubnetId: !Ref PublicSubnet01
+        SubnetId: !Ref PublicSubnet02
         KeyName: !Ref KeyName
         InstanceType: t3.nano
         ImageId: ami-0bb4c991fa89d4b9b
 
-  FrontEnd02:
+
+
+
+  ApplicationServer01:
       Type: AWS::EC2::Instance
       Properties:
-        SubnetId: !Ref PublicSubnet01
+        SubnetId: !Ref PrivateSubnet01
+        KeyName: !Ref KeyName
+        InstanceType: t3.nano
+        ImageId: ami-0bb4c991fa89d4b9b
+
+  ApplicationServer02:
+      Type: AWS::EC2::Instance
+      Properties:
+        SubnetId: !Ref PrivateSubnet02
         KeyName: !Ref KeyName
         InstanceType: t3.nano
         ImageId: ami-0bb4c991fa89d4b9b
