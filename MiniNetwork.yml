@@ -1,19 +1,47 @@
 Parameters:
-  EnvironmentTag:
-    Description: Name of Environment
+  EnvTag:
+    Description: Environment Name
     Type: String
-    Default: DKCFLAB
+    Default: DKAtuMiniNetwork
+  KeyName:
+    Description: Key Pair name
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: keypair01
+
+  CIDRVpc:
+    Type: String
+    Default: 10.10.0.0/16
+
+  CIDRPublicSub01:
+    Type: String
+    Default: 10.10.10.0/16
+
+  CIDRPublicSub02:
+    Type: String
+    Default: 10.10.20.0/16
+
+  CIDRPrivateSub01:
+    Type: String
+    Default: 10.10.30.0/16
+
+  CIDRPrivateSub02:
+    Type: String
+    Default: 10.10.40.0/16
+
+  CIDRRdsSub:
+    Type: String
+    Default: 10.10.50.0/16
 
 Resources:
   VPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: 10.192.0.0/16
+      CidrBlock: !Ref CIDRVpc
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: !Ref EnvironmentTag
+          Value: !Ref EnvTag
 
   InternetGateway:
       Type: AWS::EC2::InternetGateway
@@ -27,14 +55,61 @@ Resources:
       Properties:
         VpcId: !Ref VPC
         AvailabilityZone: us-east-1a
-        CidrBlock: 10.192.10.0/16
+        CidrBlock: !Ref CIDRPublicSub01
         MapPublicIpOnLaunch: true
 
+  PublicSubnet02:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: us-east-1b
+        CidrBlock: !Ref CIDRPublicSub02
+        MapPublicIpOnLaunch: true
+
+  PrivateSubnet01:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: us-east-1a
+        CidrBlock: !Ref CIDRPrivateSub01
+        MapPublicIpOnLaunch: false
+
+  PrivateSubnet02:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: us-east-1a
+        CidrBlock: !Ref CIDRPrivateSub02
+        MapPublicIpOnLaunch: false
 
   JumpBoxA:
-   Type: AWS::EC2::Instance
-   Properties:
-      SubnetId: !Ref PublicSubnet01
-      KeyName: keypair01
-      InstanceType: t3.nano
-      ImageId: ami-0bb4c991fa89d4b9b
+      Type: AWS::EC2::Instance
+      Properties:
+        SubnetId: !Ref PublicSubnet01
+        KeyName: !Ref KeyName
+        InstanceType: t3.nano
+        ImageId: ami-0bb4c991fa89d4b9b
+
+  JumpBoxA:
+      Type: AWS::EC2::Instance
+      Properties:
+        SubnetId: !Ref PublicSubnet01
+        KeyName: !Ref KeyName
+        InstanceType: t3.nano
+        ImageId: ami-0bb4c991fa89d4b9b
+
+  FrontEnd01:
+      Type: AWS::EC2::Instance
+      Properties:
+        SubnetId: !Ref PublicSubnet01
+        KeyName: !Ref KeyName
+        InstanceType: t3.nano
+        ImageId: ami-0bb4c991fa89d4b9b
+
+  FrontEnd02:
+      Type: AWS::EC2::Instance
+      Properties:
+        SubnetId: !Ref PublicSubnet01
+        KeyName: !Ref KeyName
+        InstanceType: t3.nano
+        ImageId: ami-0bb4c991fa89d4b9b
