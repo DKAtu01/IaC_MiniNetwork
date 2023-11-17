@@ -1,0 +1,40 @@
+Parameters:
+  EnvironmentTag:
+    Description: Name of Environment
+    Type: String
+    Default: DKCFLAB
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.192.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref EnvironmentTag
+
+  InternetGateway:
+      Type: AWS::EC2::InternetGateway
+      Properties:
+        Tags:
+          - Key: Name
+            Value: !Ref EnvironmentTag
+
+  PublicSubnet01:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: us-east-1a
+        CidrBlock: 10.192.10.0/16
+        MapPublicIpOnLaunch: true
+
+
+  JumpBoxA:
+   Type: AWS::EC2::Instance
+   Properties:
+      SubnetId: !Ref PublicSubnet01
+      KeyName: keypair01
+      InstanceType: t3.nano
+      ImageId: ami-0bb4c991fa89d4b9b
