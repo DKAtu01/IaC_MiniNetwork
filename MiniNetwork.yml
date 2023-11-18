@@ -240,8 +240,8 @@ Resources:
     Properties: 
       LaunchTemplateName: !Sub ${AWS::StackName}-launch-template
       LaunchTemplateData:
-        ImageId: ami-0bb4c991fa89d4b9b
-        InstanceType: t3.nano
+        ImageId: !Ref EC2ImageId
+        InstanceType: !Ref EC2InstanceType
         KeyName: !Ref KeyName
         SecurityGroupIds: 
           - !Ref WebServerSecurityGroup
