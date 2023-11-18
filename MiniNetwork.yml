@@ -15,10 +15,7 @@ Parameters:
     Default: us-east-1b
   MultiAZDB:
     Type: String
-    Default: true
-
-  Subnets:
-    Type: 'List<AWS::EC2::Subnet::Id>'
+    Default: Yes
 
   CIDRVpc:
     Type: String
@@ -84,6 +81,77 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
 
+  NatGateway01EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: VPC
+
+  NatGateway02EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: VPC
+
+  NatGateway01:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnet01
+
+  NatGateway02:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway2EIP.AllocationId
+      SubnetId: !Ref PublicSubnet02
+
+  PublicSubnet01RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet01
+
+  PublicSubnet02RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet02
+
+  PrivateRouteTable01:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  DefaultPrivateRoute01:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable01
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway01
+
+  PrivateSubnet01RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable01
+      SubnetId: !Ref PrivateSubnet01
+
+  PrivateRouteTable02:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  DefaultPrivateRoute02:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable02
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway02
+
+  PrivateSubnet02RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable02
+      SubnetId: !Ref PrivateSubnet02
 
   PublicSubnet01:
       Type: AWS::EC2::Subnet
@@ -125,22 +193,25 @@ Resources:
         CidrBlock: !Ref CIDRRdsSub
         MapPublicIpOnLaunch: false
 
-  ApplicationLoadBalancer:
+  WebServerLoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
-      Subnets: !Ref Subnets
+      Scheme: internet-facing
+      Subnets:
+        - !Ref PublicSubnet01
+        - !Ref PublicSubnet02
 
-  ALBListener:
+  WebServerLBListener:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
     Properties:
       DefaultActions:
         - Type: forward
-          TargetGroupArn: !Ref ALBTargetGroup
-      LoadBalancerArn: !Ref ApplicationLoadBalancer
+          TargetGroupArn: !Ref WebServerLBTargetGroup
+      LoadBalancerArn: !Ref WebServerLoadBalancer
       Port: '80'
       Protocol: HTTP
 
-  ALBTargetGroup:
+  WebServerLBTargetGroup:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthCheckIntervalSeconds: 10
@@ -158,6 +229,17 @@ Resources:
         - Key: stickiness.lb_cookie.duration_seconds
           Value: '30'
 
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateName: !Sub ${AWS::StackName}-launch-template
+      LaunchTemplateData:
+        ImageId: ami-0bb4c991fa89d4b9b
+        InstanceType: t3.nano
+        KeyName: !Ref KeyName
+        SecurityGroupIds: 
+          - !Ref WebServerSecurityGroup
+
   WebServerSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -166,53 +248,49 @@ Resources:
         - IpProtocol: tcp
           FromPort: '80'
           ToPort: '80'
-          SourceSecurityGroupId: !Select 
-            - 0
-            - !GetAtt 
-              - ApplicationLoadBalancer
-              - SecurityGroups
         - IpProtocol: tcp
           FromPort: '22'
           ToPort: '22'
           CidrIp: 0.0.0.0/0
       VpcId: !Ref VPC
 
-
-
-  WebServer01:
-      Type: AWS::EC2::Instance
-      Properties:
-        SubnetId: !Ref PublicSubnet01
-        KeyName: !Ref KeyName
-        InstanceType: t3.nano
-        ImageId: ami-0bb4c991fa89d4b9b
+  WebServerGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      MaxSize: '2'
+      MinSize: '1'
+      TargetGroupARNs:
+        - !Ref WebServerLBTargetGroup
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet01
+        - !Ref PublicSubnet02
 
   JumpBoxA:
-      Type: AWS::EC2::Instance
-      Properties:
-        SubnetId: !Ref PublicSubnet01
-        KeyName: !Ref KeyName
-        InstanceType: t3.nano
-        ImageId: ami-0bb4c991fa89d4b9b
+    Type: AWS::EC2::Instance
+    Properties:
+      SubnetId: !Ref PublicSubnet01
+      KeyName: !Ref KeyName
+      InstanceType: t3.nano
+      ImageId: ami-0bb4c991fa89d4b9b
 
   JumpBoxB:
-      Type: AWS::EC2::Instance
-      Properties:
-        SubnetId: !Ref PublicSubnet02
-        KeyName: !Ref KeyName
-        InstanceType: t3.nano
-        ImageId: ami-0bb4c991fa89d4b9b
-
-
-
+    Type: AWS::EC2::Instance
+    Properties:
+      SubnetId: !Ref PublicSubnet02
+      KeyName: !Ref KeyName
+      InstanceType: t3.nano
+      ImageId: ami-0bb4c991fa89d4b9b
 
   ApplicationServer01:
-      Type: AWS::EC2::Instance
-      Properties:
-        SubnetId: !Ref PrivateSubnet01
-        KeyName: !Ref KeyName
-        InstanceType: t3.nano
-        ImageId: ami-0bb4c991fa89d4b9b
+    Type: AWS::EC2::Instance
+    Properties:
+      SubnetId: !Ref PrivateSubnet01
+      KeyName: !Ref KeyName
+      InstanceType: t3.nano
+      ImageId: ami-0bb4c991fa89d4b9b
 
   ApplicationServer02:
       Type: AWS::EC2::Instance
