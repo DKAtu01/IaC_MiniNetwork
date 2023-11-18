@@ -1,3 +1,8 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS Cloudformation template to create Mini Network for IaC ATU
+
+# Parameters
+
 Parameters:
   EnvTag:
     Description: Environment Name
@@ -8,57 +13,73 @@ Parameters:
     Type: AWS::EC2::KeyPair::KeyName
     Default: keypair01
   MultiAZa:
+    Description: Availability Zone a
     Type: String
     Default: us-east-1a
   MultiAZb:
+    Description: Availability Zone b
     Type: String
     Default: us-east-1b
   MultiAZDB:
+    Description: Multi AZ parameter for RDS DB, set true to enable
     Type: String
     Default: 'true'
   DBName:
+    Description: Name of DB
     Type: String
     Default: DBName
   UserDB:
+    Description: Default DB User name
     Type: String
     Default: UserName
   PassDB:
+    Description: Default DB Password
     Type: String
     Default: Password
   EC2InstanceType:
+    Description: Default type for EC2 instances
     Type: String
     Default: t3.nano
   RDSInstanceType:
+    Description: Default type for RDS instance
     Type: String
     Default: db.t2.micro
   EC2ImageId:
+    Description: Image ID for EC2 instances
     Type: String
     Default: ami-0bb4c991fa89d4b9b
 
+# CIDR Tables
   CIDRVpc:
+    Description: CIDR for VPC
     Type: String
     Default: 10.10.0.0/16
 
-  CIDRPublicSub01:
+  CIDRPublicSubA:
+    Description: CIDR for Public Subnet A
     Type: String
     Default: 10.10.10.0/24
 
-  CIDRPublicSub02:
+  CIDRPublicSubB:
+    Description: CIDR for Public Subnet B
     Type: String
     Default: 10.10.11.0/24
 
-  CIDRPrivateSub01:
+  CIDRPrivateSubA:
+    Description: CIDR for Private Subnet A
     Type: String
     Default: 10.10.20.0/24
 
-  CIDRPrivateSub02:
+  CIDRPrivateSubB:
+    Description: CIDR for Private Subnet B
     Type: String
     Default: 10.10.21.0/24
 
-  CIDRRdsSub:
-    Type: String
-    Default: 10.10.30.0/24
+  # CIDRRdsSub:
+  #   Type: String
+  #   Default: 10.10.30.0/24
 
+# Resources
 Resources:
   VPC:
     Type: AWS::EC2::VPC
@@ -68,20 +89,23 @@ Resources:
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: !Ref EnvTag
+          Value: !Sub ${EnvTag} VPC
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
-          Value: !Ref EnvTag
+          Value: !Sub ${EnvTag} Internet Gateway
 
   InternetGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
       InternetGatewayId: !Ref InternetGateway
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Internet Gateway Attachment
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
@@ -98,110 +122,149 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Default Public Route
 
-  NatGateway01EIP:
+  NatGatewayAEIP:
     Type: AWS::EC2::EIP
     DependsOn: InternetGatewayAttachment
     Properties:
       Domain: VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Nat Gateway EIP A
 
-  NatGateway02EIP:
+  NatGatewayBEIP:
     Type: AWS::EC2::EIP
     DependsOn: InternetGatewayAttachment
     Properties:
       Domain: VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Nat Gateway EIP B
 
-  NatGateway01:
+  NatGatewayA:
     Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId: !GetAtt NatGateway01EIP.AllocationId
-      SubnetId: !Ref PublicSubnet01
+      AllocationId: !GetAtt NatGatewayAEIP.AllocationId
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Nat Gateway A
 
-  NatGateway02:
+  NatGatewayB:
     Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId: !GetAtt NatGateway02EIP.AllocationId
-      SubnetId: !Ref PublicSubnet02
+      AllocationId: !GetAtt NatGatewayBEIP.AllocationId
+      SubnetId: !Ref PublicSubnetB
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Nat Gateway B
 
-  PublicSubnet01RouteTableAssociation:
+  PublicSubnetARouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PublicRouteTable
-      SubnetId: !Ref PublicSubnet01
+      SubnetId: !Ref PublicSubnetA
 
-  PublicSubnet02RouteTableAssociation:
+  PublicSubnetBRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PublicRouteTable
-      SubnetId: !Ref PublicSubnet02
+      SubnetId: !Ref PublicSubnetB
 
-  PrivateRouteTable01:
+  PrivateRouteTableA:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Private Route Table A
 
-  DefaultPrivateRoute01:
+  DefaultPrivateRouteA:
     Type: AWS::EC2::Route
     Properties:
-      RouteTableId: !Ref PrivateRouteTable01
+      RouteTableId: !Ref PrivateRouteTableA
       DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway01
+      NatGatewayId: !Ref NatGatewayA
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Default Private Route A
 
-  PrivateSubnet01RouteTableAssociation:
+  PrivateSubnetARouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref PrivateRouteTable01
-      SubnetId: !Ref PrivateSubnet01
+      RouteTableId: !Ref PrivateRouteTableA
+      SubnetId: !Ref PrivateSubnetA
 
-  PrivateRouteTable02:
+  PrivateRouteTableB:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Private Route Table B
 
-  DefaultPrivateRoute02:
+  DefaultPrivateRouteB:
     Type: AWS::EC2::Route
     Properties:
-      RouteTableId: !Ref PrivateRouteTable02
+      RouteTableId: !Ref PrivateRouteTableB
       DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway02
+      NatGatewayId: !Ref NatGatewayB
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Default Private Route B
 
-  PrivateSubnet02RouteTableAssociation:
+  PrivateSubnetBRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref PrivateRouteTable02
-      SubnetId: !Ref PrivateSubnet02
+      RouteTableId: !Ref PrivateRouteTableB
+      SubnetId: !Ref PrivateSubnetB
 
-  PublicSubnet01:
+  PublicSubnetA:
       Type: AWS::EC2::Subnet
       Properties:
         VpcId: !Ref VPC
         AvailabilityZone: !Ref MultiAZa
-        CidrBlock: !Ref CIDRPublicSub01
+        CidrBlock: !Ref CIDRPublicSubA
         MapPublicIpOnLaunch: true
+        Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Public Subnet A
 
-  PublicSubnet02:
+  PublicSubnetB:
       Type: AWS::EC2::Subnet
       Properties:
         VpcId: !Ref VPC
         AvailabilityZone: !Ref MultiAZb
-        CidrBlock: !Ref CIDRPublicSub02
+        CidrBlock: !Ref CIDRPublicSubB
         MapPublicIpOnLaunch: true
+        Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Public Subnet B
 
-  PrivateSubnet01:
+  PrivateSubnetA:
       Type: AWS::EC2::Subnet
       Properties:
         VpcId: !Ref VPC
         AvailabilityZone: !Ref MultiAZa
-        CidrBlock: !Ref CIDRPrivateSub01
+        CidrBlock: !Ref CIDRPrivateSubA
         MapPublicIpOnLaunch: false
+        Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Private Subnet A
 
-  PrivateSubnet02:
+  PrivateSubnetB:
       Type: AWS::EC2::Subnet
       Properties:
         VpcId: !Ref VPC
         AvailabilityZone: !Ref MultiAZb
-        CidrBlock: !Ref CIDRPrivateSub02
+        CidrBlock: !Ref CIDRPrivateSubB
         MapPublicIpOnLaunch: false
+        Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Private Subnet B
 
   WebServerLoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
@@ -211,8 +274,11 @@ Resources:
     Properties:
       Scheme: internet-facing
       Subnets:
-        - !Ref PublicSubnet01
-        - !Ref PublicSubnet02
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} WebServer Load Balancer
 
   WebServerLBListener:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
@@ -223,6 +289,9 @@ Resources:
       LoadBalancerArn: !Ref WebServerLoadBalancer
       Port: '80'
       Protocol: HTTP
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} WebServer LB Listener
 
   WebServerLBTargetGroup:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
@@ -234,6 +303,9 @@ Resources:
       Protocol: HTTP
       UnhealthyThresholdCount: 5
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} WebServer LB Target Group
 
   LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -245,6 +317,9 @@ Resources:
         KeyName: !Ref KeyName
         SecurityGroupIds: 
           - !Ref WebServerSecurityGroup
+        Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Launch Template for AutoScalingGroup
 
   WebServerSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
@@ -259,6 +334,9 @@ Resources:
           ToPort: '22'
           CidrIp: 0.0.0.0/0
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} WebServer Security Group
 
   WebServerGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -271,8 +349,11 @@ Resources:
       TargetGroupARNs:
         - !Ref WebServerLBTargetGroup
       VPCZoneIdentifier:
-        - !Ref PublicSubnet01
-        - !Ref PublicSubnet02
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} WebServer AutoScalingGroup
 
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
@@ -280,8 +361,11 @@ Resources:
       DBSubnetGroupDescription: Subnet Group for RDS instance
       DBSubnetGroupName: DBSubnetGroup
       SubnetIds: 
-        - !Ref PrivateSubnet01
-        - !Ref PrivateSubnet02
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} DB Subnet Group
 
   DBServerSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
@@ -291,8 +375,11 @@ Resources:
         - IpProtocol: tcp
           FromPort: '3306'
           ToPort: '3306'
-          SourceSecurityGroupId: !Ref WebServerSecurityGroup
+          SourceSecurityGroupId: !Ref ApplicationServerSecurityGroup
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} DBServer Security Group
 
   ApplicationServerSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
@@ -302,8 +389,11 @@ Resources:
         - IpProtocol: tcp
           FromPort: '22'
           ToPort: '22'
-          SourceSecurityGroupId: !Ref WebServerSecurityGroup
+          SourceSecurityGroupId: !Ref JumpBoxSecurityGroup
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Application Server Security Group
   
   JumpBoxSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
@@ -313,10 +403,17 @@ Resources:
         - IpProtocol: tcp
           FromPort: '22'
           ToPort: '22'
-          SourceSecurityGroupId: !Ref WebServerSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} JumpBox Security Group
 
   MySQLDatabase:
+    Description: RDS DB instance spanning both AZ-a and AZ-b
     Type: 'AWS::RDS::DBInstance'
     DependsOn: DBSubnetGroup
     Properties:
@@ -330,43 +427,64 @@ Resources:
       AllocatedStorage: '20'
       VPCSecurityGroups:
         - !Ref DBServerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} MySQL DB Instance
 
   JumpBoxA:
+    Description: JumpBox EC2 instance in AZ-a
     Type: AWS::EC2::Instance
     Properties:
-      SubnetId: !Ref PublicSubnet01
+      SubnetId: !Ref PublicSubnetA
       KeyName: !Ref KeyName
       SecurityGroupIds:
         - !Ref JumpBoxSecurityGroup
       InstanceType: !Ref EC2InstanceType
       ImageId: !Ref EC2ImageId
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} JumpBox AZ-a Instance
 
   JumpBoxB:
+    Description: JumpBox EC2 instance in AZ-b
     Type: AWS::EC2::Instance
     Properties:
-      SubnetId: !Ref PublicSubnet02
+      SubnetId: !Ref PublicSubnetB
       KeyName: !Ref KeyName
       SecurityGroupIds:
         - !Ref JumpBoxSecurityGroup
       InstanceType: !Ref EC2InstanceType
       ImageId: !Ref EC2ImageId
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} JumpBox AZ-b Instance
 
-  ApplicationServer01:
+  ApplicationServerA:
+    Description: Application Server EC2 instance in AZ-a
     Type: AWS::EC2::Instance
     Properties:
-      SubnetId: !Ref PrivateSubnet01
+      SubnetId: !Ref PrivateSubnetA
       KeyName: !Ref KeyName
       SecurityGroupIds:
         - !Ref ApplicationServerSecurityGroup
+        - !Ref JumpBoxSecurityGroup
       InstanceType: !Ref EC2InstanceType
       ImageId: !Ref EC2ImageId
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Application Server AZ-a Instance
 
-  ApplicationServer02:
-      Type: AWS::EC2::Instance
-      Properties:
-        SubnetId: !Ref PrivateSubnet02
-        KeyName: !Ref KeyName
-        SecurityGroupIds:
+  ApplicationServerB:
+    Description: Application Server EC2 instance in AZ-a
+    Type: AWS::EC2::Instance
+    Properties:
+      SubnetId: !Ref PrivateSubnetB
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
         - !Ref ApplicationServerSecurityGroup
-        InstanceType: !Ref EC2InstanceType
-        ImageId: !Ref EC2ImageId
+        - !Ref JumpBoxSecurityGroup
+      InstanceType: !Ref EC2InstanceType
+      ImageId: !Ref EC2ImageId
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTag} Application Server AZ-b Instance
