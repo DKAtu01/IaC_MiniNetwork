@@ -25,6 +25,15 @@ Parameters:
   PassDB:
     Type: String
     Default: Password
+  EC2InstanceType:
+    Type: String
+    Default: t3.nano
+  RDSInstanceType:
+    Type: String
+    Default: db.t2.micro
+  EC2ImageId:
+    Type: String
+    Default: ami-0bb4c991fa89d4b9b
 
   CIDRVpc:
     Type: String
@@ -317,7 +326,7 @@ Resources:
       MultiAZ: !Ref MultiAZDB
       MasterUsername: !Ref UserDB
       MasterUserPassword: !Ref PassDB
-      DBInstanceClass: db.t2.micro
+      DBInstanceClass: !Ref RDSInstanceType
       AllocatedStorage: '20'
       VPCSecurityGroups:
         - !Ref DBServerSecurityGroup
@@ -329,8 +338,8 @@ Resources:
       KeyName: !Ref KeyName
       SecurityGroupIds:
         - !Ref JumpBoxSecurityGroup
-      InstanceType: t3.nano
-      ImageId: ami-0bb4c991fa89d4b9b
+      InstanceType: !Ref EC2InstanceType
+      ImageId: !Ref EC2ImageId
 
   JumpBoxB:
     Type: AWS::EC2::Instance
@@ -339,8 +348,8 @@ Resources:
       KeyName: !Ref KeyName
       SecurityGroupIds:
         - !Ref JumpBoxSecurityGroup
-      InstanceType: t3.nano
-      ImageId: ami-0bb4c991fa89d4b9b
+      InstanceType: !Ref EC2InstanceType
+      ImageId: !Ref EC2ImageId
 
   ApplicationServer01:
     Type: AWS::EC2::Instance
@@ -349,8 +358,8 @@ Resources:
       KeyName: !Ref KeyName
       SecurityGroupIds:
         - !Ref ApplicationServerSecurityGroup
-      InstanceType: t3.nano
-      ImageId: ami-0bb4c991fa89d4b9b
+      InstanceType: !Ref EC2InstanceType
+      ImageId: !Ref EC2ImageId
 
   ApplicationServer02:
       Type: AWS::EC2::Instance
@@ -359,5 +368,5 @@ Resources:
         KeyName: !Ref KeyName
         SecurityGroupIds:
         - !Ref ApplicationServerSecurityGroup
-        InstanceType: t3.nano
-        ImageId: ami-0bb4c991fa89d4b9b
+        InstanceType: !Ref EC2InstanceType
+        ImageId: !Ref EC2ImageId
