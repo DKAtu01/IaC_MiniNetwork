@@ -75,10 +75,6 @@ Parameters:
     Type: String
     Default: 10.10.21.0/24
 
-  # CIDRRdsSub:
-  #   Type: String
-  #   Default: 10.10.30.0/24
-
 # Resources
 Resources:
   VPC:
